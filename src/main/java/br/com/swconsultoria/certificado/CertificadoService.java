@@ -1,30 +1,53 @@
 package br.com.swconsultoria.certificado;
 
-import br.com.swconsultoria.certificado.exception.CertificadoException;
-import org.apache.commons.httpclient.protocol.Protocol;
-import org.bouncycastle.asn1.*;
-import sun.security.pkcs11.wrapper.CK_C_INITIALIZE_ARGS;
-import sun.security.pkcs11.wrapper.CK_TOKEN_INFO;
-import sun.security.pkcs11.wrapper.PKCS11;
-import sun.security.pkcs11.wrapper.PKCS11Exception;
-
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.security.*;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.Provider;
+import java.security.Security;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Optional;
+
+import org.apache.commons.httpclient.protocol.Protocol;
+import org.bouncycastle.asn1.ASN1InputStream;
+import org.bouncycastle.asn1.DERIA5String;
+import org.bouncycastle.asn1.DERObjectIdentifier;
+import org.bouncycastle.asn1.DEROctetString;
+import org.bouncycastle.asn1.DERPrintableString;
+import org.bouncycastle.asn1.DERSequence;
+import org.bouncycastle.asn1.DERTaggedObject;
+import org.bouncycastle.asn1.DERUTF8String;
+
+import br.com.swconsultoria.certificado.exception.CertificadoException;
+import sun.security.pkcs11.wrapper.CK_C_INITIALIZE_ARGS;
+import sun.security.pkcs11.wrapper.CK_TOKEN_INFO;
+import sun.security.pkcs11.wrapper.PKCS11;
+import sun.security.pkcs11.wrapper.PKCS11Exception;
 
 @SuppressWarnings("WeakerAccess")
 public class CertificadoService {
 
 	private static final DERObjectIdentifier CNPJ = new DERObjectIdentifier("2.16.76.1.3.3");
 	private static final DERObjectIdentifier CPF = new DERObjectIdentifier("2.16.76.1.3.1");
-	private static KeyStore keyStore = null;
+	//	private static KeyStore keyStore = null;
 
 	public static void inicializaCertificado(Certificado certificado, InputStream cacert) throws CertificadoException {
 
@@ -73,18 +96,17 @@ public class CertificadoService {
 
 	private static void setDadosCertificado(Certificado certificado) throws CertificadoException, KeyStoreException {
 
-		   KeyStore keyStore = getKeyStore(certificado);
+		KeyStore keyStore = getKeyStore(certificado);
 
-			Enumeration<String> aliasEnum = keyStore.aliases();
-			String aliasKey = aliasEnum.nextElement();
+		Enumeration<String> aliasEnum = keyStore.aliases();
+		String aliasKey = aliasEnum.nextElement();
 
-			certificado.setNome(aliasKey);
-			certificado.setCnpjCpf(getDocumentoFromCertificado(certificado, keyStore));
-			certificado
-					.setVencimento(dataValidade(certificado).toInstant().atZone(ZoneId.systemDefault()).toLocalDate());
-			certificado.setDiasRestantes(diasRestantes(certificado));
-			certificado.setValido(valido(certificado));
-		
+		certificado.setNome(aliasKey);
+		certificado.setCnpjCpf(getDocumentoFromCertificado(certificado, keyStore));
+		certificado.setVencimento(dataValidade(certificado).toInstant().atZone(ZoneId.systemDefault()).toLocalDate());
+		certificado.setDiasRestantes(diasRestantes(certificado));
+		certificado.setValido(valido(certificado));
+
 	}
 
 	public static Certificado certificadoPfx(String caminhoCertificado, String senha)
@@ -274,55 +296,57 @@ public class CertificadoService {
 	public static KeyStore getKeyStore(Certificado certificado) throws CertificadoException {
 		try {
 
-			if (keyStore == null) {
+			// if (keyStore == null) {
 
-				switch (certificado.getTipoCertificado()) {
-				case REPOSITORIO_WINDOWS:
-					keyStore = KeyStore.getInstance("Windows-MY", "SunMSCAPI");
-					keyStore.load(null, null);
-					return keyStore;
-				case REPOSITORIO_MAC:
-					keyStore = KeyStore.getInstance("KeychainStore");
-					keyStore.load(null, null);
-					return keyStore;
-				case ARQUIVO:
-					File file = new File(certificado.getArquivo());
-					if (!file.exists()) {
-						throw new CertificadoException("Certificado Digital não Encontrado");
-					}
-					keyStore = KeyStore.getInstance("PKCS12");
-					try (ByteArrayInputStream bs = new ByteArrayInputStream(Files.readAllBytes(file.toPath()))) {
-						keyStore.load(bs, certificado.getSenha().toCharArray());
-					}
-					return keyStore;
-				case ARQUIVO_BYTES:
-					keyStore = KeyStore.getInstance("PKCS12");
-					try (ByteArrayInputStream bs = new ByteArrayInputStream(certificado.getArquivoBytes())) {
-						keyStore.load(bs, certificado.getSenha().toCharArray());
-					}
-					return keyStore;
-				case TOKEN_A3:
-					System.setProperty("sun.security.ssl.allowUnsafeRenegotiation", "true");
-					String slot = null;
-					if (certificado.getSerialToken() != null) {
-						slot = getSlot(certificado.getDllA3(), certificado.getSerialToken());
-					}
-					try (InputStream conf = configA3(certificado.getMarcaA3(), certificado.getDllA3(), slot)) {
-						Provider p = new sun.security.pkcs11.SunPKCS11(conf);
-						Security.addProvider(p);
-						keyStore = KeyStore.getInstance("PKCS11");
-						if (keyStore.getProvider() == null) {
-							keyStore = KeyStore.getInstance("PKCS11", p);
-						}
-						keyStore.load(null, certificado.getSenha().toCharArray());
-					}
-					return keyStore;
+			KeyStore keyStore = null;
 
-				default:
-					throw new CertificadoException(
-							"Tipo de certificado não Configurado: " + certificado.getTipoCertificado());
+			switch (certificado.getTipoCertificado()) {
+			case REPOSITORIO_WINDOWS:
+				keyStore = KeyStore.getInstance("Windows-MY", "SunMSCAPI");
+				keyStore.load(null, null);
+				return keyStore;
+			case REPOSITORIO_MAC:
+				keyStore = KeyStore.getInstance("KeychainStore");
+				keyStore.load(null, null);
+				return keyStore;
+			case ARQUIVO:
+				File file = new File(certificado.getArquivo());
+				if (!file.exists()) {
+					throw new CertificadoException("Certificado Digital não Encontrado");
 				}
-			};
+				keyStore = KeyStore.getInstance("PKCS12");
+				try (ByteArrayInputStream bs = new ByteArrayInputStream(Files.readAllBytes(file.toPath()))) {
+					keyStore.load(bs, certificado.getSenha().toCharArray());
+				}
+				return keyStore;
+			case ARQUIVO_BYTES:
+				keyStore = KeyStore.getInstance("PKCS12");
+				try (ByteArrayInputStream bs = new ByteArrayInputStream(certificado.getArquivoBytes())) {
+					keyStore.load(bs, certificado.getSenha().toCharArray());
+				}
+				return keyStore;
+			case TOKEN_A3:
+				System.setProperty("sun.security.ssl.allowUnsafeRenegotiation", "true");
+				String slot = null;
+				if (certificado.getSerialToken() != null) {
+					slot = getSlot(certificado.getDllA3(), certificado.getSerialToken());
+				}
+				try (InputStream conf = configA3(certificado.getMarcaA3(), certificado.getDllA3(), slot)) {
+					Provider p = new sun.security.pkcs11.SunPKCS11(conf);
+					Security.addProvider(p);
+					keyStore = KeyStore.getInstance("PKCS11");
+					if (keyStore.getProvider() == null) {
+						keyStore = KeyStore.getInstance("PKCS11", p);
+					}
+					keyStore.load(null, certificado.getSenha().toCharArray());
+				}
+				return keyStore;
+
+			default:
+				throw new CertificadoException(
+						"Tipo de certificado não Configurado: " + certificado.getTipoCertificado());
+			}
+			// };
 		} catch (NoSuchAlgorithmException | CertificateException | IOException | KeyStoreException
 				| NoSuchProviderException e) {
 			if (Optional.ofNullable(e.getMessage()).orElse("").startsWith("keystore password was incorrect"))
@@ -330,7 +354,7 @@ public class CertificadoService {
 
 			throw new CertificadoException("Erro Ao pegar KeyStore: " + e.getMessage());
 		}
-		return keyStore;
+	//	return keyStore;
 
 	}
 
