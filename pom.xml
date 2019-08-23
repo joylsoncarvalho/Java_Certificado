@@ -5,7 +5,7 @@
     <version>2.3-SNAPSHOT</version>
     <name>Java_Certificado</name>
     <description>Api java para gerenciamento de certificados digitais</description>
-    <url>https://github.com/Samuel-Oliveira/Java_Certificado</url>
+    <url>https://github.com/joylsoncarvalho/Java_Certificado</url>
 
     <licenses>
         <license>
