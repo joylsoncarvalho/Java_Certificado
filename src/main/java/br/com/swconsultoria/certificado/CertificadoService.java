@@ -296,7 +296,7 @@ public class CertificadoService {
 	public static KeyStore getKeyStore(Certificado certificado) throws CertificadoException {
 		try {
 
-			if (keyStoreStatic == null) {
+			//if (keyStoreStatic == null) {
 
 				KeyStore keyStore;
 
@@ -323,7 +323,7 @@ public class CertificadoService {
 					keyStore = KeyStore.getInstance("PKCS12");
 					try (ByteArrayInputStream bs = new ByteArrayInputStream(certificado.getArquivoBytes())) {
 						keyStore.load(bs, certificado.getSenha().toCharArray());
-						keyStoreStatic = keyStore;
+						//keyStoreStatic = keyStore;
 					}
 					return keyStore;
 				case TOKEN_A3:
@@ -347,8 +347,8 @@ public class CertificadoService {
 					throw new CertificadoException(
 							"Tipo de certificado não Configurado: " + certificado.getTipoCertificado());
 				}
-			}
-			;
+			//}
+			//;
 		} catch (NoSuchAlgorithmException | CertificateException | IOException | KeyStoreException
 				| NoSuchProviderException e) {
 			if (Optional.ofNullable(e.getMessage()).orElse("").startsWith("keystore password was incorrect"))
@@ -356,7 +356,7 @@ public class CertificadoService {
 
 			throw new CertificadoException("Erro Ao pegar KeyStore: " + e.getMessage());
 		}
-		return keyStoreStatic;
+		//return keyStoreStatic;
 
 	}
 
