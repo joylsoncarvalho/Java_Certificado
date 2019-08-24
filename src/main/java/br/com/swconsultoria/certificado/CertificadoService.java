@@ -47,7 +47,7 @@ public class CertificadoService {
 
 	private static final DERObjectIdentifier CNPJ = new DERObjectIdentifier("2.16.76.1.3.3");
 	private static final DERObjectIdentifier CPF = new DERObjectIdentifier("2.16.76.1.3.1");
-	//	private static KeyStore keyStore = null;
+	private static KeyStore keyStoreStatic = null;
 
 	public static void inicializaCertificado(Certificado certificado, InputStream cacert) throws CertificadoException {
 
@@ -296,57 +296,59 @@ public class CertificadoService {
 	public static KeyStore getKeyStore(Certificado certificado) throws CertificadoException {
 		try {
 
-			// if (keyStore == null) {
+			if (keyStoreStatic == null) {
 
-			KeyStore keyStore = null;
+				KeyStore keyStore;
 
-			switch (certificado.getTipoCertificado()) {
-			case REPOSITORIO_WINDOWS:
-				keyStore = KeyStore.getInstance("Windows-MY", "SunMSCAPI");
-				keyStore.load(null, null);
-				return keyStore;
-			case REPOSITORIO_MAC:
-				keyStore = KeyStore.getInstance("KeychainStore");
-				keyStore.load(null, null);
-				return keyStore;
-			case ARQUIVO:
-				File file = new File(certificado.getArquivo());
-				if (!file.exists()) {
-					throw new CertificadoException("Certificado Digital não Encontrado");
-				}
-				keyStore = KeyStore.getInstance("PKCS12");
-				try (ByteArrayInputStream bs = new ByteArrayInputStream(Files.readAllBytes(file.toPath()))) {
-					keyStore.load(bs, certificado.getSenha().toCharArray());
-				}
-				return keyStore;
-			case ARQUIVO_BYTES:
-				keyStore = KeyStore.getInstance("PKCS12");
-				try (ByteArrayInputStream bs = new ByteArrayInputStream(certificado.getArquivoBytes())) {
-					keyStore.load(bs, certificado.getSenha().toCharArray());
-				}
-				return keyStore;
-			case TOKEN_A3:
-				System.setProperty("sun.security.ssl.allowUnsafeRenegotiation", "true");
-				String slot = null;
-				if (certificado.getSerialToken() != null) {
-					slot = getSlot(certificado.getDllA3(), certificado.getSerialToken());
-				}
-				try (InputStream conf = configA3(certificado.getMarcaA3(), certificado.getDllA3(), slot)) {
-					Provider p = new sun.security.pkcs11.SunPKCS11(conf);
-					Security.addProvider(p);
-					keyStore = KeyStore.getInstance("PKCS11");
-					if (keyStore.getProvider() == null) {
-						keyStore = KeyStore.getInstance("PKCS11", p);
+				switch (certificado.getTipoCertificado()) {
+				case REPOSITORIO_WINDOWS:
+					keyStore = KeyStore.getInstance("Windows-MY", "SunMSCAPI");
+					keyStore.load(null, null);
+					return keyStore;
+				case REPOSITORIO_MAC:
+					keyStore = KeyStore.getInstance("KeychainStore");
+					keyStore.load(null, null);
+					return keyStore;
+				case ARQUIVO:
+					File file = new File(certificado.getArquivo());
+					if (!file.exists()) {
+						throw new CertificadoException("Certificado Digital não Encontrado");
 					}
-					keyStore.load(null, certificado.getSenha().toCharArray());
-				}
-				return keyStore;
+					keyStore = KeyStore.getInstance("PKCS12");
+					try (ByteArrayInputStream bs = new ByteArrayInputStream(Files.readAllBytes(file.toPath()))) {
+						keyStore.load(bs, certificado.getSenha().toCharArray());
+					}
+					return keyStore;
+				case ARQUIVO_BYTES:
+					keyStore = KeyStore.getInstance("PKCS12");
+					try (ByteArrayInputStream bs = new ByteArrayInputStream(certificado.getArquivoBytes())) {
+						keyStore.load(bs, certificado.getSenha().toCharArray());
+						keyStoreStatic = keyStore;
+					}
+					return keyStore;
+				case TOKEN_A3:
+					System.setProperty("sun.security.ssl.allowUnsafeRenegotiation", "true");
+					String slot = null;
+					if (certificado.getSerialToken() != null) {
+						slot = getSlot(certificado.getDllA3(), certificado.getSerialToken());
+					}
+					try (InputStream conf = configA3(certificado.getMarcaA3(), certificado.getDllA3(), slot)) {
+						Provider p = new sun.security.pkcs11.SunPKCS11(conf);
+						Security.addProvider(p);
+						keyStore = KeyStore.getInstance("PKCS11");
+						if (keyStore.getProvider() == null) {
+							keyStore = KeyStore.getInstance("PKCS11", p);
+						}
+						keyStore.load(null, certificado.getSenha().toCharArray());
+					}
+					return keyStore;
 
-			default:
-				throw new CertificadoException(
-						"Tipo de certificado não Configurado: " + certificado.getTipoCertificado());
+				default:
+					throw new CertificadoException(
+							"Tipo de certificado não Configurado: " + certificado.getTipoCertificado());
+				}
 			}
-			// };
+			;
 		} catch (NoSuchAlgorithmException | CertificateException | IOException | KeyStoreException
 				| NoSuchProviderException e) {
 			if (Optional.ofNullable(e.getMessage()).orElse("").startsWith("keystore password was incorrect"))
@@ -354,7 +356,7 @@ public class CertificadoService {
 
 			throw new CertificadoException("Erro Ao pegar KeyStore: " + e.getMessage());
 		}
-	//	return keyStore;
+		return keyStoreStatic;
 
 	}
 
